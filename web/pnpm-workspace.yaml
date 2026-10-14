@@ -1,0 +1,9 @@
+# pnpm 11 รัน install script ของ dependency เฉพาะตัวที่อนุญาตไว้ตรงนี้
+# ตัวที่ไม่อยู่ในรายการ = install ล้ม ต้องตัดสินใจ true/false ให้ทุกตัว
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+
+# install บน Node/pnpm ที่ไม่ตรงกับ "engines" ใน package.json = ล้ม ไม่ใช่แค่เตือน
+# (pnpm 11 ไม่อ่าน engine-strict จาก .npmrc แล้ว ต้องตั้งที่นี่เท่านั้น)
+engineStrict: true
