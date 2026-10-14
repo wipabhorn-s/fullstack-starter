@@ -1,0 +1,3 @@
+# เก็บทุกไฟล์เป็น LF ทั้งใน repo และใน working copy (prettier ตั้ง endOfLine: lf)
+# กัน Windows ที่เปิด core.autocrlf แปลงเป็น CRLF แล้ว lint ใน CI ฟ้องทั้งไฟล์
+* text=auto eol=lf

@@ -1,0 +1,68 @@
+// ชื่อ model/field เป็น PascalCase/camelCase ส่วนชื่อตาราง/คอลัมน์ใน DB เป็น snake_case ผ่าน @@map/@map
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/database/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id             String     @id @default(uuid()) @db.Uuid
+  /// เก็บเป็นตัวพิมพ์เล็กเสมอ (UsersService แปลงให้ก่อนบันทึก/ค้นหา)
+  email          String     @unique
+  name           String
+  /// null = บัญชีที่สมัครผ่าน Google และยังไม่ได้ตั้งรหัสผ่าน
+  password       String?
+  googleId       String?    @unique @map("google_id")
+  role           Role       @default(USER)
+  /// SUSPENDED = แอดมินระงับบัญชี AuthGuard ปฏิเสธทุกคำขอทันที (403 ACCOUNT_SUSPENDED)
+  status         UserStatus @default(ACTIVE)
+  /// เลขรุ่นของ session: access token ทุกใบพกเลขนี้ไว้ (ver)
+  /// +1 = token ที่ออกก่อนหน้าใช้ไม่ได้ทันทีแม้ยังไม่หมดอายุ (ระงับบัญชี, เปลี่ยนรหัสผ่าน)
+  sessionVersion Int        @default(0) @map("session_version")
+  /// soft delete: มีค่า = ลบแล้ว AuthGuard ตอบ 401 และไม่นับว่ามีบัญชีนี้อยู่
+  deletedAt      DateTime?  @map("deleted_at") @db.Timestamptz(3)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+/// refresh token: ใช้ขอ access token ใบใหม่โดยไม่ต้องล็อกอินซ้ำ
+/// - เก็บเฉพาะ sha256 ของ token ไม่เก็บตัวจริง
+/// - ใช้แล้วได้ใบใหม่ทุกครั้ง (rotation) ใบใหม่อยู่ family เดียวกับใบเดิม
+/// - ใบที่ใช้ไปแล้วถูกเอามาใช้ซ้ำ = token หลุด → ยกเลิกทั้ง family
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  /// token ทุกใบที่หมุนต่อกันมาจากการล็อกอินครั้งเดียว (หนึ่งอุปกรณ์/เบราว์เซอร์)
+  familyId  String    @map("family_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  /// เวลาที่ถูกใช้ขอใบใหม่ (ละเอียดระดับมิลลิวินาที ใช้เทียบช่วงผ่อนผันตอนหน้าเว็บส่งคำขอพร้อมกัน)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}

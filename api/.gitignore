@@ -1,0 +1,30 @@
+# compiled output
+/dist
+/node_modules
+/build
+
+# Prisma client ที่ generate แล้ว (สร้างใหม่ตอน pnpm install)
+/src/database/generated/
+
+# Logs
+logs
+*.log
+pnpm-debug.log*
+
+# Tests
+/coverage
+
+# dotenv environment variable files
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+.idea
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# TypeScript
+*.tsbuildinfo
