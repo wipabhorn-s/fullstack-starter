@@ -1,0 +1,117 @@
+name: CI
+
+# Runs on every pull request into main, and on pushes to main.
+# Wire this up as a required status check in Settings -> Branches so a PR
+# that fails here cannot be merged.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: api (NestJS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    # Postgres ทิ้งได้ ใช้แค่พิสูจน์ว่า migration รันได้จริงและตรงกับ schema
+    # (migration แรกสร้างด้วย migrate diff โดยไม่มี DB — ตรงนี้คือที่ที่มันถูกรันจริง)
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: api/pnpm-lock.yaml
+
+      # --frozen-lockfile fails if package.json and pnpm-lock.yaml disagree,
+      # which catches a dependency added without committing the lockfile.
+      # postinstall runs `prisma generate`.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations to an empty database
+        run: pnpm prisma migrate deploy
+
+      # --exit-code: 2 = the database built from migrations differs from
+      # schema.prisma, i.e. someone changed the schema without
+      # `pnpm prisma migrate dev`.
+      - name: Check migrations match schema.prisma
+        run: pnpm prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      # lint:check, not lint — the `lint` script carries --fix, which would
+      # rewrite files in CI instead of reporting the problem.
+      - name: Lint
+        run: pnpm run lint:check
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Test (e2e)
+        run: pnpm run test:e2e
+
+      - name: Build
+        run: pnpm run build
+
+  web:
+    name: web (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    env:
+      # lib/env.ts ตรวจ env ตอน import หน้าเว็บจึง build ไม่ได้ถ้าไม่มีค่า
+      # ค่าหลอกพอ: build ไม่ได้เรียก API จริง
+      API_URL: http://localhost:8000
+      AUTH_SECRET: ci-build-placeholder
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Build
+        run: pnpm run build
